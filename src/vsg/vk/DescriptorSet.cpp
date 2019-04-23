@@ -179,9 +179,10 @@ void BindDescriptorSets::write(Output& output) const
 void BindDescriptorSets::pushTo(State& state) const
 {
     state.dirty = true;
-
+#ifndef  DESCRIPTOR_SET_SIZE
     // make sure there is an appropriate descriptorStack entry available.
     if (_firstSet >= state.descriptorStacks.size()) state.descriptorStacks.resize(_firstSet + 1);
+#endif
 
     // push this to the appropriate descriptorStack
     state.descriptorStacks[_firstSet].push(this);

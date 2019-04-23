@@ -30,6 +30,11 @@ namespace vsg
             _bufferData(bufferData),
             _indexType(indexType) {}
 
+        void dispatchInline(CommandBuffer& commandBuffer) const
+        {
+            vkCmdBindIndexBuffer(commandBuffer, *_bufferData._buffer, _bufferData._offset, _indexType);
+        }
+
         void dispatch(CommandBuffer& commandBuffer) const override;
 
     protected:

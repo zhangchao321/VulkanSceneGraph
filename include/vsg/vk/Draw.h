@@ -32,6 +32,11 @@ namespace vsg
         void read(Input& input) override;
         void write(Output& output) const override;
 
+        inline void dispatchInline(CommandBuffer& commandBuffer) const
+        {
+            vkCmdDraw(commandBuffer, vertexCount, instanceCount, firstVertex, firstInstance);
+        }
+
         void dispatch(CommandBuffer& commandBuffer) const override
         {
             vkCmdDraw(commandBuffer, vertexCount, instanceCount, firstVertex, firstInstance);
@@ -58,6 +63,11 @@ namespace vsg
 
         void read(Input& input) override;
         void write(Output& output) const override;
+
+        inline void dispatchInline(CommandBuffer& commandBuffer) const
+        {
+            vkCmdDrawIndexed(commandBuffer, indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
+        }
 
         void dispatch(CommandBuffer& commandBuffer) const override
         {

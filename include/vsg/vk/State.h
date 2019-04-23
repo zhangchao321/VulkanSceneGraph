@@ -44,7 +44,7 @@ namespace vsg
         void pop()
         {
             stack.pop();
-            dirty = true;
+            dirty = !stack.empty();
         }
         size_t size() const { return stack.size(); }
         T& top() { return stack.top(); }
@@ -52,9 +52,44 @@ namespace vsg
 
         inline void dispatch(CommandBuffer& commandBuffer)
         {
-            if (dirty && !stack.empty())
+            if (dirty)
             {
                 stack.top()->dispatch(commandBuffer);
+                dirty = false;
+            }
+        }
+    };
+
+    template<class T>
+    class InlineStateStack
+    {
+    public:
+        InlineStateStack() :
+            dirty(false) {}
+
+        using Stack = std::stack<ref_ptr<const T>>;
+        Stack stack;
+        bool dirty;
+
+        void push(const T* value)
+        {
+            stack.push(ref_ptr<const T>(value));
+            dirty = true;
+        }
+        void pop()
+        {
+            stack.pop();
+            dirty = !stack.empty();
+        }
+        size_t size() const { return stack.size(); }
+        T& top() { return stack.top(); }
+        const T& top() const { return stack.top(); }
+
+        inline void dispatch(CommandBuffer& commandBuffer)
+        {
+            if (dirty)
+            {
+                stack.top()->dispatchInline(commandBuffer);
                 dirty = false;
             }
         }
@@ -118,21 +153,34 @@ namespace vsg
         }
     };
 
+#define USE_COMPUTE
+#define USE_PUSHCONSTANTS
+//#define DESCRIPTOR_SET_SIZE 1
+
     class State : public Inherit<Object, State>
     {
     public:
         State() :
             dirty(false) {}
 
-        using ComputePipelineStack = StateStack<BindComputePipeline>;
         using GraphicsPipelineStack = StateStack<BindGraphicsPipeline>;
-        using DescriptorStacks = std::vector<StateStack<BindDescriptorSets>>;
-        using VertexBuffersStack = StateStack<BindVertexBuffers>;
-        using IndexBufferStack = StateStack<BindIndexBuffer>;
-        using PushConstantsMap = std::map<uint32_t, StateStack<PushConstants>>;
+
+#ifdef DESCRIPTOR_SET_SIZE
+        using DescriptorStacks = std::array<InlineStateStack<BindDescriptorSets>,DESCRIPTOR_SET_SIZE>;
+#else
+        using DescriptorStacks = std::vector<InlineStateStack<BindDescriptorSets>>;
+#endif
+
+        //using VertexBuffersStack = StateStack<BindVertexBuffers>;
+        //using IndexBufferStack = StateStack<BindIndexBuffer>;
 
         bool dirty;
+
+#ifdef USE_COMPUTE
+        using ComputePipelineStack = StateStack<BindComputePipeline>;
         ComputePipelineStack computePipelineStack;
+#endif
+
         GraphicsPipelineStack graphicsPipelineStack;
 
         DescriptorStacks descriptorStacks;
@@ -141,13 +189,18 @@ namespace vsg
         MatrixStack viewMatrixStack{64};
         MatrixStack modelMatrixStack{128};
 
+#ifdef USE_COMPUTE
+        using PushConstantsMap = std::map<uint32_t, StateStack<PushConstants>>;
         PushConstantsMap pushConstantsMap;
+#endif
 
         inline void dispatch(CommandBuffer& commandBuffer)
         {
             if (dirty)
             {
+#ifdef USE_COMPUTE
                 computePipelineStack.dispatch(commandBuffer);
+#endif
                 graphicsPipelineStack.dispatch(commandBuffer);
                 for (auto& descriptorStack : descriptorStacks)
                 {
@@ -158,10 +211,12 @@ namespace vsg
                 viewMatrixStack.dispatch(commandBuffer);
                 modelMatrixStack.dispatch(commandBuffer);
 
+#ifdef USE_PUSHCONSTANTS
                 for (auto& pushConstantsStack : pushConstantsMap)
                 {
                     pushConstantsStack.second.dispatch(commandBuffer);
                 }
+#endif
                 dirty = false;
             }
         }

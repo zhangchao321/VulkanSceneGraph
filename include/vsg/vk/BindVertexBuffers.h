@@ -44,6 +44,11 @@ namespace vsg
             _offsets.push_back(offset);
         }
 
+        void dispatchInline(CommandBuffer& commandBuffer) const
+        {
+            vkCmdBindVertexBuffers(commandBuffer, _firstBinding, static_cast<uint32_t>(_buffers.size()), _vkBuffers.data(), _offsets.data());
+        }
+
         void dispatch(CommandBuffer& commandBuffer) const override;
 
     protected:

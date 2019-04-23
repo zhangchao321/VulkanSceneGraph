@@ -78,6 +78,29 @@ void Geometry::write(Output& output) const
     }
 }
 
+
+class VIICommand : public Command
+{
+public:
+
+    ref_ptr<BindVertexBuffers> _bindVertexBuffers;
+    ref_ptr<BindIndexBuffer> _bindIndexBuffer;
+    ref_ptr<DrawIndexed> _drawIndexed;
+
+    VIICommand(BindVertexBuffers* bvb, BindIndexBuffer* bib, DrawIndexed* di) :
+        _bindVertexBuffers(bvb),
+        _bindIndexBuffer(bib),
+        _drawIndexed(di) {}
+
+    void dispatch(CommandBuffer& commandBuffer) const override
+    {
+        _bindVertexBuffers->dispatchInline(commandBuffer);
+        _bindIndexBuffer->dispatchInline(commandBuffer);
+        _drawIndexed->dispatchInline(commandBuffer);
+    }
+};
+
+
 void Geometry::compile(Context& context)
 {
     if (!_renderImplementation.empty()) return;
@@ -136,6 +159,29 @@ void Geometry::compile(Context& context)
 
     // add the commands in the the _renderImplementation.
     _renderImplementation.insert(_renderImplementation.end(), _commands.begin(), _commands.end());
+
+    if (_renderImplementation.size()==3)
+    {
+        if (typeid(*_renderImplementation[0])==typeid(BindVertexBuffers) &&
+            typeid(*_renderImplementation[1])==typeid(BindIndexBuffer) &&
+            typeid(*_renderImplementation[2])==typeid(DrawIndexed))
+        {
+            //std::cout<<"Matched VII"<<std::endl;
+
+            ref_ptr<VIICommand> vii(new VIICommand(static_cast<BindVertexBuffers*>(_renderImplementation[0].get()),
+                                                   static_cast<BindIndexBuffer*>(_renderImplementation[1].get()),
+                                                   static_cast<DrawIndexed*>(_renderImplementation[2].get())));
+
+            _renderImplementation.clear();
+            _renderImplementation.emplace_back(vii);
+
+        }
+        else
+        {
+            //std::cout<<"Did not match VII"<<std::endl;
+        }
+    }
+
 }
 
 void Geometry::dispatch(CommandBuffer& commandBuffer) const

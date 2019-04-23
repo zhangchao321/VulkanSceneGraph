@@ -17,6 +17,7 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 #include <vsg/vk/DescriptorPool.h>
 #include <vsg/vk/DescriptorSetLayout.h>
 #include <vsg/vk/PipelineLayout.h>
+#include <vsg/vk/CommandBuffer.h>
 
 namespace vsg
 {
@@ -130,6 +131,12 @@ namespace vsg
 
         void pushTo(State& state) const override;
         void popFrom(State& state) const override;
+
+        inline void dispatchInline(CommandBuffer& commandBuffer) const
+        {
+            vkCmdBindDescriptorSets(commandBuffer, _bindPoint, *(_pipelineLayout), _firstSet, static_cast<uint32_t>(_vkDescriptorSets.size()), _vkDescriptorSets.data(), 0, nullptr);
+        }
+
         void dispatch(CommandBuffer& commandBuffer) const override;
 
         // compile the Vulkan object, context parameter used for Device
