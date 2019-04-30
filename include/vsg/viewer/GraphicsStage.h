@@ -23,13 +23,14 @@ namespace vsg
     class VSG_DECLSPEC GraphicsStage : public Inherit<Stage, GraphicsStage>
     {
     public:
-        GraphicsStage(ref_ptr<Node> commandGraph, ref_ptr<Camera> camera = ref_ptr<Camera>());
+        GraphicsStage(ref_ptr<Node> commandGraph, ref_ptr<Camera> camera = ref_ptr<Camera>(), bool newTraversal = true);
 
         ref_ptr<Camera> _camera;
         ref_ptr<Node> _commandGraph;
         vsg::ref_ptr<vsg::mat4Value> _projMatrix;
         vsg::ref_ptr<vsg::mat4Value> _viewMatrix;
         vsg::ref_ptr<ViewportState> _viewport;
+        bool _newTraversal = true;
 
         VkExtent2D _extent2D;
 

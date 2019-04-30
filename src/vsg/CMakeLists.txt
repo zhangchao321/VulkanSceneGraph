@@ -45,6 +45,7 @@ set(SOURCES
     io/ReaderWriter.cpp
 
     traversals/DispatchTraversal.cpp
+    traversals/DispatchVisitor.cpp
     traversals/CullTraversal.cpp
     traversals/CompileTraversal.cpp
     traversals/ComputeBounds.cpp

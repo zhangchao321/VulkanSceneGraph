@@ -12,6 +12,9 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 #include <vsg/viewer/GraphicsStage.h>
 
+#include <vsg/traversals/DispatchVisitor.h>
+#include <vsg/traversals/DispatchTraversal.h>
+
 #include <array>
 #include <limits>
 
@@ -90,11 +93,12 @@ namespace vsg
     };
 }; // namespace vsg
 
-GraphicsStage::GraphicsStage(ref_ptr<Node> commandGraph, ref_ptr<Camera> camera) :
+GraphicsStage::GraphicsStage(ref_ptr<Node> commandGraph, ref_ptr<Camera> camera, bool newTraversal) :
     _camera(camera),
     _commandGraph(commandGraph),
     _projMatrix(new vsg::mat4Value),
     _viewMatrix(new vsg::mat4Value),
+    _newTraversal(newTraversal),
     _extent2D{std::numeric_limits<uint32_t>::max(), std::numeric_limits<uint32_t>::max()}
 {
 }
@@ -165,10 +169,6 @@ void GraphicsStage::populateCommandBuffer(CommandBuffer* commandBuffer, Framebuf
         if (_viewMatrix) _camera->getViewMatrix()->get((*_viewMatrix));
     }
 
-    // set up the dispatching of the commands into the command buffer
-    DispatchTraversal dispatchTraversal(commandBuffer);
-    dispatchTraversal.setProjectionMatrix(_projMatrix->value());
-    dispatchTraversal.setViewMatrix(_viewMatrix->value());
 
     VkCommandBufferBeginInfo beginInfo = {};
     beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
@@ -193,7 +193,23 @@ void GraphicsStage::populateCommandBuffer(CommandBuffer* commandBuffer, Framebuf
     vkCmdBeginRenderPass(*commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 
     // traverse the command buffer to place the commands into the command buffer.
-    _commandGraph->accept(dispatchTraversal);
+    // set up the dispatching of the commands into the command buffer
+    if (_newTraversal)
+    {
+        DispatchVisitor dispatchVisitor(commandBuffer);
+        dispatchVisitor.setProjectionMatrix(_projMatrix->value());
+        dispatchVisitor.setViewMatrix(_viewMatrix->value());
+
+        _commandGraph->accept(dispatchVisitor);
+    }
+    else
+    {
+        DispatchTraversal dispatchTraversal(commandBuffer);
+        dispatchTraversal.setProjectionMatrix(_projMatrix->value());
+        dispatchTraversal.setViewMatrix(_viewMatrix->value());
+
+        _commandGraph->accept(dispatchTraversal);
+    }
 
     vkCmdEndRenderPass(*commandBuffer);
 

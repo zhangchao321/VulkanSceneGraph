@@ -10,7 +10,7 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 </editor-fold> */
 
-#include <vsg/traversals/DispatchTraversal.h>
+#include <vsg/traversals/DispatchVisitor.h>
 
 #include <vsg/nodes/Commands.h>
 #include <vsg/nodes/CullGroup.h>
@@ -24,7 +24,6 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 #include <vsg/vk/Command.h>
 #include <vsg/vk/CommandBuffer.h>
 #include <vsg/vk/RenderPass.h>
-#include <vsg/vk/State.h>
 
 #include <vsg/maths/plane.h>
 
@@ -34,89 +33,42 @@ using namespace vsg;
 
 //#define INLINE_TRAVERSE
 
-class DispatchTraversal::InternalData
+DispatchVisitor::DispatchVisitor(CommandBuffer* commandBuffer) :
+    _commandBuffer(commandBuffer)
 {
-public:
-    State _state;
-    ref_ptr<CommandBuffer> _commandBuffer;
+    //std::cout << "DispatchVisitor::DispatchVisitor(" << commandBuffer << ")" << std::endl;
 
-    using Polytope = std::vector<vsg::plane>;
+    _frustumUnit = Polytope{
+        vsg::plane(1.0, 0.0, 0.0, 1.0),  // left plane
+        vsg::plane(-1.0, 0.0, 0.0, 1.0), // right plane
+        vsg::plane(0.0, 1.0, 0.0, 1.0),  // bottom plane
+        vsg::plane(0.0, -1.0, 0.0, 1.0)  // top plane
+    };
 
-    Polytope _frustumUnit;
+    _frustumDirty = true;
+}
 
-    bool _frustumDirty;
-    Polytope _frustum;
-
-    explicit InternalData(CommandBuffer* commandBuffer) :
-        _commandBuffer(commandBuffer)
-    {
-        //        std::cout << "DispatchTraversal::InternalData::InternalData(" << commandBuffer << ")" << std::endl;
-        _frustumUnit = Polytope{
-            vsg::plane(1.0, 0.0, 0.0, 1.0),  // left plane
-            vsg::plane(-1.0, 0.0, 0.0, 1.0), // right plane
-            vsg::plane(0.0, 1.0, 0.0, 1.0),  // bottom plane
-            vsg::plane(0.0, -1.0, 0.0, 1.0)  // top plane
-        };
-
-        _frustumDirty = true;
-    }
-
-    ~InternalData()
-    {
-        //        std::cout << "DispatchTraversal::InternalData::~InternalData()" << std::endl;
-    }
-
-    template<typename T>
-    constexpr bool intersect(t_sphere<T> const& s)
-    {
-        if (_frustumDirty)
-        {
-            auto pmv = _state.projectionMatrixStack.top() * _state.viewMatrixStack.top() * _state.modelMatrixStack.top();
-
-#if 0
-            std::cout<<"   pmv = "<<pmv<<std::endl;
-            std::cout<<"   s = "<<s.vec<<std::endl;
-#endif
-            _frustum.clear();
-            for (auto& pl : _frustumUnit)
-            {
-                _frustum.push_back(pl * pmv);
-            }
-
-            _frustumDirty = false;
-        }
-
-        return vsg::intersect(_frustum, s);
-    }
-};
-
-DispatchTraversal::DispatchTraversal(CommandBuffer* commandBuffer) :
-    _data(new InternalData(commandBuffer))
+DispatchVisitor::~DispatchVisitor()
 {
 }
 
-DispatchTraversal::~DispatchTraversal()
+void DispatchVisitor::setProjectionMatrix(const dmat4& projMatrix)
 {
-    delete _data;
+    _state.projectionMatrixStack.set(projMatrix);
 }
 
-void DispatchTraversal::setProjectionMatrix(const dmat4& projMatrix)
+void DispatchVisitor::setViewMatrix(const dmat4& viewMatrix)
 {
-    _data->_state.projectionMatrixStack.set(projMatrix);
+    _state.viewMatrixStack.set(viewMatrix);
 }
 
-void DispatchTraversal::setViewMatrix(const dmat4& viewMatrix)
-{
-    _data->_state.viewMatrixStack.set(viewMatrix);
-}
-
-void DispatchTraversal::apply(const Object& object)
+void DispatchVisitor::apply(const Object& object)
 {
     //    std::cout<<"Visiting object"<<std::endl;
     object.traverse(*this);
 }
 
-void DispatchTraversal::apply(const Group& group)
+void DispatchVisitor::apply(const Group& group)
 {
 //    std::cout<<"Visiting Group "<<std::endl;
 #ifdef INLINE_TRAVERSE
@@ -126,7 +78,7 @@ void DispatchTraversal::apply(const Group& group)
 #endif
 }
 
-void DispatchTraversal::apply(const QuadGroup& group)
+void DispatchVisitor::apply(const QuadGroup& group)
 {
 //    std::cout<<"Visiting QuadGroup "<<std::endl;
 #ifdef INLINE_TRAVERSE
@@ -136,19 +88,19 @@ void DispatchTraversal::apply(const QuadGroup& group)
 #endif
 }
 
-void DispatchTraversal::apply(const LOD& object)
+void DispatchVisitor::apply(const LOD& object)
 {
     //    std::cout<<"Visiting LOD "<<std::endl;
     object.traverse(*this);
 }
 
-void DispatchTraversal::apply(const CullGroup& cullGroup)
+void DispatchVisitor::apply(const CullGroup& cullGroup)
 {
 #if 0
     // no culling
     cullGroup.traverse(*this);
 #else
-    if (_data->intersect(cullGroup.getBound()))
+    if (intersect(cullGroup.getBound()))
     {
         //std::cout<<"Passed node"<<std::endl;
     #ifdef INLINE_TRAVERSE
@@ -165,15 +117,14 @@ void DispatchTraversal::apply(const CullGroup& cullGroup)
 }
 
 
-void DispatchTraversal::apply(const CullNode& cullNode)
+void DispatchVisitor::apply(const CullNode& cullNode)
 {
 #if 0
     // no culling
     cullGroup.traverse(*this);
 #else
-    if (_data->intersect(cullNode.getBound()))
+    if (intersect(cullNode.getBound()))
     {
-        //std::cout<<"Passed node"<<std::endl;
 #ifdef INLINE_TRAVERSE
         cullNode.getChild()->accept(*this);
 #else
@@ -188,10 +139,10 @@ void DispatchTraversal::apply(const CullNode& cullNode)
 #endif
 }
 
-void DispatchTraversal::apply(const StateGroup& stateGroup)
+void DispatchVisitor::apply(const StateGroup& stateGroup)
 {
     //    std::cout<<"Visiting StateGroup "<<std::endl;
-    stateGroup.pushTo(_data->_state);
+    stateGroup.pushTo(_state);
 
 #ifdef INLINE_TRAVERSE
     vsg::StateGroup::t_traverse(stateGroup, *this);
@@ -199,13 +150,13 @@ void DispatchTraversal::apply(const StateGroup& stateGroup)
     stateGroup.traverse(*this);
 #endif
 
-    stateGroup.popFrom(_data->_state);
+    stateGroup.popFrom(_state);
 }
 
-void DispatchTraversal::apply(const MatrixTransform& mt)
+void DispatchVisitor::apply(const MatrixTransform& mt)
 {
-    _data->_state.modelMatrixStack.push(mt.getMatrix());
-    _data->_state.dirty = true;
+    _state.modelMatrixStack.push(mt.getMatrix());
+    _state.dirty = true;
 
 #ifdef INLINE_TRAVERSE
     vsg::MatrixTransform::t_traverse(mt, *this);
@@ -213,24 +164,24 @@ void DispatchTraversal::apply(const MatrixTransform& mt)
     mt.traverse(*this);
 #endif
 
-    _data->_state.modelMatrixStack.pop();
-    _data->_state.dirty = true;
+    _state.modelMatrixStack.pop();
+    _state.dirty = true;
 }
 
 // Vulkan nodes
-void DispatchTraversal::apply(const Commands& commands)
+void DispatchVisitor::apply(const Commands& commands)
 {
     //    std::cout<<"Visiting Command "<<std::endl;
-    _data->_state.dispatch(*(_data->_commandBuffer));
+    _state.dispatch(*(_commandBuffer));
     for (auto& command : commands.getChildren())
     {
-        command->dispatch(*(_data->_commandBuffer));
+        command->dispatch(*(_commandBuffer));
     }
 }
 
-void DispatchTraversal::apply(const Command& command)
+void DispatchVisitor::apply(const Command& command)
 {
     //    std::cout<<"Visiting Command "<<std::endl;
-    _data->_state.dispatch(*(_data->_commandBuffer));
-    command.dispatch(*(_data->_commandBuffer));
+    _state.dispatch(*(_commandBuffer));
+    command.dispatch(*(_commandBuffer));
 }
