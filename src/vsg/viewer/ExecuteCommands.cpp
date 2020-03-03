@@ -10,29 +10,47 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 </editor-fold> */
 
+#include <vsg/ui/ApplicationEvent.h>
+#include <vsg/io/DatabasePager.h>
+#include <vsg/viewer/ExecuteCommands.h>
 #include <vsg/vk/CommandBuffer.h>
-#include <vsg/vk/NextSubPass.h>
 
 using namespace vsg;
-
-NextSubPass::~NextSubPass()
+ExecuteCommands::~ExecuteCommands()
 {
 }
 
-void NextSubPass::read(Input& input)
+void ExecuteCommands::read(Input& input)
 {
     Command::read(input);
-    input.readValue<uint32_t>("contents", contents);
+    //   Group::read(input);
+
+    // reset the Vulkan related objects
+    /*_bufferData._buffer = 0;
+    _bufferData._offset = 0;
+    _bufferData._range = 0;
+
+    // read the key indices data
+    _bufferData._data = input.readObject<Data>("Indices");*/
 }
 
-void NextSubPass::write(Output& output) const
+void ExecuteCommands::write(Output& output) const
 {
     Command::write(output);
+    //  Group::write(output);
 
-    output.writeValue<uint32_t>("contents", contents);
+    // write indices data
+    // output.writeObject("Indices", _bufferData._data.get());
 }
 
-void NextSubPass::dispatch(CommandBuffer& commandBuffer) const
+
+void ExecuteCommands::dispatch(CommandBuffer& commandBuffer) const
 {
-    vkCmdNextSubpass(commandBuffer, contents);
+    _commandbuffers.clear();
+
+    for(auto r : _cmdgraphs)
+        _commandbuffers.emplace_back(*r->lastrecorded);
+
+    vkCmdExecuteCommands(commandBuffer, _commandbuffers.size(), _commandbuffers.data());
 }
+

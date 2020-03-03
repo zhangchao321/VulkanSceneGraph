@@ -1,3 +1,5 @@
+#pragma once
+
 /* <editor-fold desc="MIT License">
 
 Copyright(c) 2018 Robert Osfield
@@ -10,29 +12,43 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 </editor-fold> */
 
-#include <vsg/vk/CommandBuffer.h>
-#include <vsg/vk/NextSubPass.h>
+//#include <vsg/nodes/StateGroup.h>
+#include <vsg/viewer/CommandGraph.h>
+#include <vsg/vk/Buffer.h>
+#include <vsg/vk/Descriptor.h>
+#include <vsg/vk/State.h>
 
-using namespace vsg;
-
-NextSubPass::~NextSubPass()
+namespace vsg
 {
-}
 
-void NextSubPass::read(Input& input)
-{
-    Command::read(input);
-    input.readValue<uint32_t>("contents", contents);
-}
+    /** Execute Secondary Command Buffers
+     * (in charge of blocking-sync- their filling?)
+    }*/
 
-void NextSubPass::write(Output& output) const
-{
-    Command::write(output);
+    class VSG_DECLSPEC ExecuteCommands : public Inherit<Command, ExecuteCommands>
+    {
+    public:
+        ExecuteCommands() {}
 
-    output.writeValue<uint32_t>("contents", contents);
-}
+        std::vector<ref_ptr<CommandBuffer> > records;
+        using Secondaries = std::vector< ref_ptr < CommandGraph > >;
+        Secondaries _cmdgraphs;
 
-void NextSubPass::dispatch(CommandBuffer& commandBuffer) const
-{
-    vkCmdNextSubpass(commandBuffer, contents);
-}
+        mutable std::vector< VkCommandBuffer > _commandbuffers;
+        void addCommandGraph(ref_ptr<CommandGraph> d) { _cmdgraphs.emplace_back(d); }
+
+        void read(Input& input) override;
+        void write(Output& output) const override;
+
+        void dispatch(CommandBuffer& commandBuffer) const override;
+
+
+    protected:
+        virtual ~ExecuteCommands();
+
+        BufferData _bufferData;
+        VkIndexType _indexType;
+    };
+    VSG_type_name(vsg::ExecuteCommands);
+
+} // namespace vsg
